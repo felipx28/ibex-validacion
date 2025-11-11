@@ -1,0 +1,33 @@
+name: Tests self-hosted
+on: push
+env:
+  CHECKSUM: 0b026502131e8b9195438f772bebe56409fb5acf9d26cfd1eba303eb92246b32112312827344a01bb71652dc5c3740136e7e360cdd40df1a5466f71fdbf7b0fe
+jobs:
+  linux-cmake-build-and-check:
+    runs-on: self-hosted
+    container:
+      image: ubuntu:latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.1.1
+      - name: Install dependencies
+        run: |
+          apt update
+          apt install -y gcc g++ cmake flex bison libcppunit-dev patch javacc default-jre default-jdk
+      - name: CMake
+        run: |
+          mkdir build
+          cd build
+          cmake -DINTERVAL_LIB=${{ matrix.interval_lib }} -DBUILD_JAVA_INTERFACE=ON -DBUILD_SHARED_LIBS=ON -DLP_LIB=${{ matrix.lp_lib }} ..
+      - name: make
+        run: |
+          cd build
+          make
+      - name: make check
+        run: |
+          cd build
+          make check
+    strategy:
+      matrix:
+        interval_lib: [gaol, filib]
+        lp_lib: [soplex]

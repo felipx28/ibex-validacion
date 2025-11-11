@@ -1,0 +1,64 @@
+
+# ---- NOTE ----
+# Can't manage so far to link with CppUnit (installation with vcpkg does not generate cmake config files).
+# This script only check installation on master branch.
+# The tests can be run on tests-without-cppunit branch.
+# ----------------
+version: build{build}
+image: Visual Studio 2015
+clone_folder: C:\projects\ibex-lib
+test: off
+configuration:
+    - Release
+
+environment:
+  matrix:
+    - CMAKE_PLATFORM: "Visual Studio 14 2015"
+      IBEX_PATH: 'C:\Program Files (x86)\IBEX'
+      platform: x86
+      CPPUNIT_DIR: C:\tools\vcpkg\installed\x86-windows
+    - CMAKE_PLATFORM: "Visual Studio 14 2015 Win64"
+      IBEX_PATH: 'C:\Program Files\IBEX'
+      platform: x64
+      CPPUNIT_DIR: C:\tools\vcpkg\installed\x64-windows
+
+init:
+    - cmd: vcpkg cache
+cache:
+    - C:\tools\vcpkg\installed\
+install:
+    - vcpkg install cppunit:"%platform%"-windows
+    - choco install winflexbison
+
+build_script:
+  - echo Running cmake...
+  - cd c:\projects\ibex-lib
+  - mkdir build
+  - cd build
+  - cmake -G "%CMAKE_PLATFORM%" -DBUILD_TESTING=1 -DCMAKE_BUILD_TYPE=Release -DINTERVAL_LIB=filib -DCPPUNIT_DIR="%CPPUNIT_DIR%" -DBUILD_JAVA_INTERFACE=ON -DBUILD_SHARED_LIBS=ON ../
+  - cmake --build . --config Release
+  - cmake --install . --config Release
+  - set PATH=%PATH%;%IBEX_PATH%\bin;%IBEX_PATH%\lib
+  - ibexsolve -v
+  # FIXME: cppunit not found ---> can't build target check
+  #- cmake --build . --config Release --target check
+
+artifacts:
+- path: build\ibex*.exe
+  name: ibex-lib
+- path: build\ibex*.zip
+  name: ibex-lib-zip
+
+# deploy:
+#   release: ibex-lib-v$(appveyor_build_version)
+#   description: 'ibexlib'
+#   provider: GitHub
+#   auth_token:
+#     secure: *******************************************
+
+#   artifact: ibex-lib,ibex-lib-zip
+#   draft: true
+#   prerelease: false
+#   on:
+#     branch: develop_test_appveyor      # release from master branch only
+#     appveyor_repo_tag: false        # deploy on tag push only
