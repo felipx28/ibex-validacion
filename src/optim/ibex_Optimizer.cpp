@@ -114,10 +114,6 @@ double preprocess_feature(double val, FeatureType type) {
         case FeatureType::UbFObj:
         return std::min(val, 1000000.0);
         
-        // case FeatureType::SearchSpace:
-        //     // Límite superior de 500000.0
-        //     return std::min(val, 500000.0);
-        
         case FeatureType::BiggerDiam:
         // Límite superior de 500000.0
         return std::min(val, 1000000.0);
@@ -126,20 +122,26 @@ double preprocess_feature(double val, FeatureType type) {
 			// Límite inferior de -500000.0
 			return std::min(val, 10000000.0);
         
+		default:
+		// Para 'gap_rel_loup', 'depth', 'variables', etc.
+			// Si el valor es infinito (y no fue "clippeado" arriba), es un problema.
+			// Lo reemplazamos por un valor muy grande pero finito.
+			if (std::isinf(val)) {
+				return (val > 0) ? 1e12: -1e12;
+			}
+			break;
+		
+			// case FeatureType::SearchSpace:
+        //     // Límite superior de 500000.0
+        //     return std::min(val, 500000.0);
+        
+        
         // case FeatureType::Loup:
 		// 	break;
     
 		// case FeatureType::BufferSize:
         //     break;
         
-        default:
-        // Para 'gap_rel_loup', 'depth', 'variables', etc.
-            // Si el valor es infinito (y no fue "clippeado" arriba), es un problema.
-            // Lo reemplazamos por un valor muy grande pero finito.
-            if (std::isinf(val)) {
-                return (val > 0) ? std::numeric_limits<double>::max() : -std::numeric_limits<double>::max();
-            }
-            break;
         }
         
         // Si no es un caso especial con clipping, devolver el valor después del chequeo de cero.
@@ -612,7 +614,7 @@ Optimizer::Status Optimizer::optimize() {
 	update_uplo();
     pid_t pid_t = getpid();
 
-    std::ofstream info_file("/home/felipe/Desktop/bisectores_modelo_feasible_diving_pipes/validacion_500sim_entrenamiento.txt", std::ios::app);
+    std::ofstream info_file("/home/felipe/Desktop/bisectores_modelo_feasible_diving_pipes/validacion_200sim_online.txt", std::ios::app);
 
 
 	try {
@@ -689,7 +691,7 @@ Optimizer::Status Optimizer::optimize() {
                 }
 				
                 // cada 500 feasible divings llamamos al modelo (o en el nodo raíz)
-                if (cont % 500 == 0 || root_node) {
+                if (cont % 200 == 0 || root_node) { //
                     root_node = false; 
                     std::cout << "id: " << call_id << std::endl;
                     std::string input_json = build_feature_json(call_id++, box, system, goal_var);
@@ -856,7 +858,7 @@ const char* white() {
 
 void Optimizer::report() {
 
-    std::ofstream info_file("/home/felipe/Desktop/bisectores_modelo_feasible_diving_pipes/validacion_500sim_entrenamiento.txt", std::ios::app);
+    std::ofstream info_file("/home/felipe/Desktop/bisectores_modelo_feasible_diving_pipes/validacion_200sim_online.txt", std::ios::app);
 	pid_t pid_t = getpid();
 
 	// if (!cov || !buffer.empty()) { // not started
