@@ -86,89 +86,34 @@ std::string call_python_model(const std::string& input_json) {
 //  AQUÍ SE REALIZA EL PREPROCESAMIENTO DE LOS DATOS ANTES DE LLAMAR AL MODELO
 // ============================================================================
 
-double const UMBRAL_CERO = 1e-7;
+double const UMBRAL_CERO = 1e-12; 
+double const VALOR_MAXIMO_JSON = 1e30; // Valor seguro para JSON
 
-enum class FeatureType {
-    LbFObj, UbFObj, SearchSpace, BiggerDiam, LowerDiam, Loup,
-    GapRelLoup, BufferSize, Depth, Variables, Restricciones,
-    GenericFeature
-};
-
-double preprocess_feature(double val, FeatureType type) {
-    // 1. Manejar NaN. Reemplazar con 0 puede ocultar problemas. 
-    //    Considera si otro valor (como -1) o un manejo de errores es mejor.
+// Función ÚNICA y GENÉRICA de preprocesamiento
+// Mantenemos el argumento 'feature_name' para que tu llamada en build_feature_json no falle,
+// aunque internamente ya no necesitemos usarlo para switch/case.
+double preprocess_feature(double val, const std::string& feature_name) {
+    
+    // 1. Manejar NaN: Reemplazar por 0 es seguro
     if (std::isnan(val)) {
-        return std::numeric_limits<double>::quiet_NaN();
+        return 0.0; 
     }
     
-    // 2. Tratar valores muy cercanos a cero
+    // 2. Manejar Infinitos:
+    // JSON no soporta "Infinity". Lo reemplazamos por el máximo double seguro.
+    if (std::isinf(val)) {
+        return (val > 0) ? VALOR_MAXIMO_JSON : -VALOR_MAXIMO_JSON;
+    }
+
+    // 3. Limpieza de ruido numérico
     if (std::abs(val) < UMBRAL_CERO) {
         val = 0.0;
     }
-    
-    switch (type) {
-        case FeatureType::LbFObj:
-        // Límite inferior y superior (-1e7, 1e7)
-        return std::max(-10000000.0, std::min(val, 10000000.0));
-        
-        case FeatureType::UbFObj:
-        return std::min(val, 1000000.0);
-        
-        case FeatureType::BiggerDiam:
-        // Límite superior de 500000.0
-        return std::min(val, 1000000.0);
 
-		case FeatureType::LowerDiam:
-			// Límite inferior de -500000.0
-			return std::min(val, 10000000.0);
-        
-		default:
-		// Para 'gap_rel_loup', 'depth', 'variables', etc.
-			// Si el valor es infinito (y no fue "clippeado" arriba), es un problema.
-			// Lo reemplazamos por un valor muy grande pero finito.
-			if (std::isinf(val)) {
-				return (val > 0) ? 1e12: -1e12;
-			}
-			break;
-		
-			// case FeatureType::SearchSpace:
-        //     // Límite superior de 500000.0
-        //     return std::min(val, 500000.0);
-        
-        
-        // case FeatureType::Loup:
-		// 	break;
+    // --- SIN HARD CLIPPING ---
+    // Dejamos pasar el valor real (ej: 1e15) para que Python aplique SymLog.
     
-		// case FeatureType::BufferSize:
-        //     break;
-        
-        }
-        
-        // Si no es un caso especial con clipping, devolver el valor después del chequeo de cero.
-        return val;
-    }
-    
-    FeatureType string_to_feature_type(const std::string& feature_name) {
-        static const std::unordered_map<std::string, FeatureType> map = {
-        {"lb_f_obj",     FeatureType::LbFObj},
-        {"ub_f_obj",     FeatureType::UbFObj},
-        // {"search_space", FeatureType::SearchSpace},
-        {"bigger_diam",  FeatureType::BiggerDiam},
-        {"lower_diam",   FeatureType::LowerDiam}
-        // Añade aquí los mismos nombres de clave que usas en Python
-    };
-
-    auto it = map.find(feature_name);
-    if (it != map.end()) {
-        return it->second;
-    }
-    return FeatureType::GenericFeature;
-}
-
-double preprocess_feature(double raw_value, const std::string& feature_name) {
-    // Esta función ahora sabe que existe otra 'preprocess_feature' que acepta un 'FeatureType'.
-    // El compilador elegirá la correcta y no intentará una conversión inválida.
-    return preprocess_feature(raw_value, string_to_feature_type(feature_name));
+    return val;
 }
 
 // ================================================================================
@@ -580,6 +525,8 @@ void Optimizer::start(const CovOptimData& data, double obj_init_bound) {
 std::string build_feature_json(long call_id, const IntervalVector& box, const System& sys, int goal_var) {
     int variables = sys.nb_var;
     int restricciones = sys.nb_ctr;
+    
+    // Obtener valores crudos
     double lb_f_obj = box[goal_var].lb();
     double ub_f_obj = box[goal_var].ub();
     double search_space = 0.0;
@@ -589,11 +536,16 @@ std::string build_feature_json(long call_id, const IntervalVector& box, const Sy
     double bigger_diam = box.max_diam();
     double lower_diam = box.min_diam();
 
+    // Sanitizar (Solo quitar NaNs/Infs, sin recortar magnitud)
     lb_f_obj = preprocess_feature(lb_f_obj, "lb_f_obj");
     ub_f_obj = preprocess_feature(ub_f_obj, "ub_f_obj");
+    search_space = preprocess_feature(search_space, "search_space"); // Asegúrate de procesar este también
     bigger_diam = preprocess_feature(bigger_diam, "bigger_diam");
     lower_diam = preprocess_feature(lower_diam, "lower_diam");
 
+    // Construir JSON
+    // NOTA: Asegúrate de que el orden coincida con los índices de Python
+    // 0:variables, 1:restricciones, 2:lb, 3:ub, 4:search_space, 5:bigger, 6:lower
     std::string json = "{\"id\": " + std::to_string(call_id) +
                        ", \"features\": [";
     json += std::to_string(variables) + ", ";
