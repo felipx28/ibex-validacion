@@ -566,7 +566,7 @@ Optimizer::Status Optimizer::optimize() {
 	update_uplo();
     pid_t pid_t = getpid();
 
-    std::ofstream info_file("/home/felipe/Desktop/bisectores_modelo_feasible_diving_pipes/validacion_200sim_online.txt", std::ios::app);
+    std::ofstream info_file("/home/felipe/Desktop/bisectores_modelo_feasible_diving_pipes/validacion_200sim_online_symlog.txt", std::ios::app);
 
 
 	try {
@@ -648,7 +648,7 @@ Optimizer::Status Optimizer::optimize() {
                     std::cout << "id: " << call_id << std::endl;
                     std::string input_json = build_feature_json(call_id++, box, system, goal_var);
                     std::string response_json = call_python_model(input_json);
-                    std::cout << "data: " << input_json << std::endl;
+                    //std::cout << "data: " << input_json << std::endl;
                     //model_decision = 0; 
                     size_t pos = response_json.find("\"decision\":");
                     if (pos != std::string::npos) {
@@ -810,7 +810,7 @@ const char* white() {
 
 void Optimizer::report() {
 
-    std::ofstream info_file("/home/felipe/Desktop/bisectores_modelo_feasible_diving_pipes/validacion_200sim_online.txt", std::ios::app);
+    std::ofstream info_file("/home/felipe/Desktop/bisectores_modelo_feasible_diving_pipes/validacion_200sim_online_symlog.txt", std::ios::app);
 	pid_t pid_t = getpid();
 
 	// if (!cov || !buffer.empty()) { // not started
