@@ -433,6 +433,10 @@ Optimizer::Status Optimizer::optimize() {
 	Timer timer;
 	timer.start();
 
+	double prec = 1e-7;
+	OptimLargestFirst bisector_olf(goal_var, true, prec, 0.5);
+	RoundRobin bisector_rr(prec, 0.5);
+
 	update_uplo();
 	try {
 
@@ -445,7 +449,7 @@ Optimizer::Status Optimizer::optimize() {
 
 			try {
 
-				pair<Cell*,Cell*> new_cells=bsc.bisect(*c);
+				pair<Cell*,Cell*> new_cells=bisector_rr.bisect(*c);
 				buffer.pop();
 				delete c; // deletes the cell.
 

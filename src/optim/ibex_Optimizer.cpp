@@ -86,33 +86,54 @@ std::string call_python_model(const std::string& input_json) {
 //  AQUÍ SE REALIZA EL PREPROCESAMIENTO DE LOS DATOS ANTES DE LLAMAR AL MODELO
 // ============================================================================
 
-double const UMBRAL_CERO = 1e-12; 
-double const VALOR_MAXIMO_JSON = 1e30; // Valor seguro para JSON
+// Constantes alineadas con el script de Python (Código 1)
+double const UMBRAL_CERO = 1e-7; 
+double const VALOR_EXTREMO_MANEJABLE = 1e12; 
 
-// Función ÚNICA y GENÉRICA de preprocesamiento
-// Mantenemos el argumento 'feature_name' para que tu llamada en build_feature_json no falle,
-// aunque internamente ya no necesitemos usarlo para switch/case.
+// Función de preprocesamiento que replica exactamente 'parsear_multiples_benchmarks'
 double preprocess_feature(double val, const std::string& feature_name) {
     
-    // 1. Manejar NaN: Reemplazar por 0 es seguro
+    // 1. Manejar NaN:
+    // En Python se deja pasar o se ignora, pero para JSON/C++ es vital convertirlo a un número.
+    // Usamos 0.0 como valor seguro (neutral para redes neuronales usualmente).
     if (std::isnan(val)) {
         return 0.0; 
     }
     
-    // 2. Manejar Infinitos:
-    // JSON no soporta "Infinity". Lo reemplazamos por el máximo double seguro.
-    if (std::isinf(val)) {
-        return (val > 0) ? VALOR_MAXIMO_JSON : -VALOR_MAXIMO_JSON;
-    }
-
-    // 3. Limpieza de ruido numérico
+    // 2. Tratar valores muy cercanos a cero (Limpieza de ruido numérico)
+    // Se aplica ANTES de evaluar infinitos o límites.
     if (std::abs(val) < UMBRAL_CERO) {
         val = 0.0;
     }
 
-    // --- SIN HARD CLIPPING ---
-    // Dejamos pasar el valor real (ej: 1e15) para que Python aplique SymLog.
+    // 3. Manejar Infinitos de forma numéricamente estable.
+    // Python: "Se aplica ANTES del clipping".
+    // Reemplazamos 'inf' por VALOR_EXTREMO_MANEJABLE (1e12) para evitar overflow.
+    if (std::isinf(val)) {
+        val = (val > 0) ? VALOR_EXTREMO_MANEJABLE : -VALOR_EXTREMO_MANEJABLE;
+    }
+
+    // 4. Aplicar límites específicos por característica (Clipping).
+    // Esta lógica replica los 'if/elif' del código Python.
+    // Nota: search_space no está aquí porque en Python se omite intencionadamente.
     
+    if (feature_name == "lb_f_obj") {
+        // Python: max(-1e7, min(num_valor, 1e7))
+        val = std::max(-10000000.0, std::min(val, 10000000.0));
+    } 
+    else if (feature_name == "ub_f_obj") {
+        // Python: min(num_valor, 1e6)
+        val = std::min(val, 1000000.0);
+    } 
+    else if (feature_name == "bigger_diam") {
+        // Python: min(num_valor, 1e6)
+        val = std::min(val, 1000000.0);
+    } 
+    else if (feature_name == "lower_diam") {
+        // Python: min(num_valor, 1e7)
+        val = std::min(val, 10000000.0);
+    }
+
     return val;
 }
 
@@ -566,7 +587,7 @@ Optimizer::Status Optimizer::optimize() {
 	update_uplo();
     pid_t pid_t = getpid();
 
-    std::ofstream info_file("/home/felipe/Desktop/bisectores_modelo_feasible_diving_pipes/validacion_200sim_online_symlog.txt", std::ios::app);
+    std::ofstream info_file("/home/felipe/Desktop/bisectores_modelo_feasible_diving_pipes/validacion_dataset_gigante.txt", std::ios::app);
 
 
 	try {
@@ -597,9 +618,9 @@ Optimizer::Status Optimizer::optimize() {
 		 * OBTENCIÓN DEL SISTEMA PARA BISECTORES QUE LO NECESITAN *
 		 **********************************************************/
 		System system = lfd->finder_x_taylor.sys;
-		SmearMax bisector_sm(system, prec);
-		SmearSum bisector_ss(system, prec);
-		SmearSumRelative bisector_ssr(system, prec);
+		// SmearMax bisector_sm(system, prec);
+		// SmearSum bisector_ss(system, prec);
+		// SmearSumRelative bisector_ssr(system, prec);
 		/*********************************
 	 	 * FIN DECLARACIÓN DE BISECTORES *
 	 	 *********************************/
@@ -622,7 +643,7 @@ Optimizer::Status Optimizer::optimize() {
 		int cont = 0;
 		double epsilon = 1e-10;
 
-        Bsc* bisectors[] = {&bsc, &bisector_olf, &bisector_rr, &bisector_sm, &bisector_ss, &bisector_ssr};
+        Bsc* bisectors[] = {&bsc, &bisector_olf, &bisector_rr};//, &bisector_sm, &bisector_ss, &bisector_ssr};
 		Bsc *chosen_bsc = bisectors[0];
         int model_decision = -1;
         bool root_node = true;
@@ -643,7 +664,7 @@ Optimizer::Status Optimizer::optimize() {
                 }
 				
                 // cada 500 feasible divings llamamos al modelo (o en el nodo raíz)
-                if (cont % 200 == 0 || root_node) { //
+                if ((cont % 200 == 0) || root_node) { //cont % 200 == 0 || 
                     root_node = false; 
                     std::cout << "id: " << call_id << std::endl;
                     std::string input_json = build_feature_json(call_id++, box, system, goal_var);
@@ -810,7 +831,7 @@ const char* white() {
 
 void Optimizer::report() {
 
-    std::ofstream info_file("/home/felipe/Desktop/bisectores_modelo_feasible_diving_pipes/validacion_200sim_online_symlog.txt", std::ios::app);
+    std::ofstream info_file("/home/felipe/Desktop/bisectores_modelo_feasible_diving_pipes/validacion_dataset_gigante.txt", std::ios::app);
 	pid_t pid_t = getpid();
 
 	// if (!cov || !buffer.empty()) { // not started
